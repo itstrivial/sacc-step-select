@@ -579,9 +579,13 @@ def time_constants(base_df,title):
 
 def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
 
+    #model_id = 'jump-16-5'    
+    
+    #traindata = load_data('waldo_short','train')
     traindata = load_data(dataset,'train')
     stds = traindata.S_std.numpy().flatten()
     means = traindata.S_mean.numpy().flatten()
+    #data_extent = ((0-means[0])/stds[0],(1000-means[0])/stds[0],(0-means[1])/stds[1],(800-means[1])/stds[1])
 
     print('using model arguments:',kwargs)
     
@@ -589,22 +593,40 @@ def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
     for x in traindata:
         x[:,1:] = x[:,1:]*stds + means
 
-    spl = stepselect.get_spline(traindata)
+    #spl = get_spline("stepselect_waldo_posttimeopt_emp2.csv")
+    spl = stepselect.get_spline(traindata)#(filename)
 
     markovdist = stepselect.Conditional_dXdY(traindata,data_extent,seed=444,sigma_xy=1500,sigma_dxdy=30)
     lognormaldist = stepselect.LogNormalDist(traindata,data_extent,seed=444)
 
     cols = ['dist','logdist','logdist_sq','cardinality','horiz_align','centre_dist_change','dir_change','dir_change2','log_amp_change','dist_1back','centre_dist_init','have_visited','whistdist','whistdist_change','crossings']
+    #cols = ['logdist','logdist_sq','cardinality','horiz_align','centre_dist_change','dir_change','dir_change2','log_amp_change','dist_1back','centre_dist_init','have_visited','whistdist','whistdist_change','crossings']
     par_cols = ['logdist','cardinality','horiz_align','centre_dist_change','dir_change','dir_change2','log_amp_change','dist_1back','have_visited','whistdist','whistdist_change','crossings']
     ss_df = pd.read_csv(filename)
     ss_df['logdist_sq'] = ss_df['logdist']**2
-    res = stepwise_regression(ss_df,cols,extra=['logdist*t'])#,thresh=0.001)
+    #ss_df['cardinality'] = (1+ss_df['cardinality'])**2
+    #ss_df['horiz_align'] = (1+ss_df['horiz_align'])**2
+    #res = stepwise_regression(ss_df,cols,extra=['logdist*t'])#,thresh=0.001)
+
+    norm_df = ss_df.copy()
+    preds = cols + ['t']
+    colmeans = {}
+    colstds = {}
+    for col in preds:
+        colmeans[col] = ss_df[col].mean()
+        colstds[col] = ss_df[col].std()
+        norm_df[col] = (ss_df[col] - colmeans[col]) / colstds[col]
+
+
+    res,_ = stepwise_regression(norm_df,cols,extra=['logdist:t','t'],conditional="choice_id")
 
     models = []
 
     models.append(stepselect.ParametricModel(data_extent,cols=cols,**kwargs))
     models.append(stepselect.MarkovModel(markovdist,predname="markov_dxdy",ampspline=spl))
     models.append(stepselect.MarkovModel(lognormaldist,predname="markov_par"))
+    #models.append(stepselect.NNModel(model_id,n_iter=5,maxhist=1,predname="nn_nohist"))
+    #models.append(stepselect.NNModel(model_id,n_iter=5))
 
     alldata = load_data(dataset)
     data = alldata[index].detach().numpy()
@@ -618,14 +640,16 @@ def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
             m.model_update(t0,x0,y0)
 
     extent = data_extent
-    N=40
-    x = np.linspace(extent[0],extent[1], N) #edges (N)
-    y = np.linspace(extent[2],extent[3], N)
+    Nx=96
+    Ny=54
+    x = np.linspace(extent[0],extent[1], Nx+1) #edges
+    y = np.linspace(extent[2],extent[3], Ny+1)
     dx = x[1]-x[0]
     dy = y[1]-y[0]
-    s = np.stack([x[:-1]+dx/2, y[:-1]+dy/2], axis=1) #centres (N-1)
+    #s = np.stack([x, y], axis=1)
+    #s = np.stack([x[:-1]+dx/2, y[:-1]+dy/2], axis=1) #centres (N-1)
 
-    X, Y = np.meshgrid(s[:, 0], s[:, 1])
+    X, Y = np.meshgrid(x[:-1]+dx/2, y[:-1]+dy/2)
     steps = np.stack([X.reshape(-1), Y.reshape(-1)], axis=1)
 
     newdf = pd.DataFrame(np.array(steps),columns=['x','y'])
@@ -635,11 +659,28 @@ def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
         newdf = pd.concat([newdf,preds_df],axis=1)
         print("model complete")
         
-    ncasecontrol = 10
-    nsamples = N**2
-    beta_adjust = np.log(ncasecontrol-1) - np.log(nsamples-1)
-    logit = res.get_prediction(newdf).linpred + beta_adjust
-    p_par = newdf['markov_par']/(1+np.exp(-logit))#np.exp(logit)
+    #newdf['cardinality'] = (1+newdf['cardinality'])**2
+    #newdf['horiz_align'] = (1+newdf['horiz_align'])**2
+
+        
+    #ncasecontrol = 10
+    #nsamples = N**2
+    #beta_adjust = np.log(ncasecontrol-1) - np.log(nsamples-1)
+    #logit = res.get_prediction(newdf).linpred + beta_adjust
+    #p_par = newdf['markov_par']/(1+np.exp(-logit))#np.exp(logit)
+    
+    #dummy columns
+    newdf['choice_id'] = 1
+    dumtarget = np.zeros(len(newdf))
+    dumtarget[0] = 1
+    newdf['target'] = dumtarget
+
+    for col in preds:
+        newdf[col] = (newdf[col] - colmeans[col]) / colstds[col]
+
+
+    newmod = sm.ConditionalLogit.from_formula(res.model.formula,newdf,groups='choice_id')
+    p_par = newdf['markov_par']*np.exp(np.dot(newmod.exog,res.params))
 
     newdf['markov_dxdy'] = np.log(newdf['markov_dxdy']/sum(newdf['markov_dxdy']) + 1e-4)
     p_par = np.log(p_par / sum(p_par) + 1e-4)
@@ -650,15 +691,18 @@ def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
 
     skip=0
     for i in range(len(axs)):
+        #if i==0:
+        #    axs[i].imshow(np.array(newdf['markov_par']).reshape(N-1, N-1),origin='lower',extent=extent)
+        #    axs[i].set_title('Sampling function',fontsize=9)            
         if i>=(len(newdf.columns)-3+skip) or i<skip:
             axs[i].set_axis_off()
             continue
         else:
             col=par_cols[i-skip]
             if col in ['have_visited','crossings']:
-                axs[i].imshow(np.array(newdf[col]).reshape(N-1, N-1),origin='lower',extent=extent,interpolation='none',cmap='inferno')                
+                axs[i].imshow(np.array(newdf[col]).reshape(Ny, Nx),origin='lower',extent=extent,interpolation='none',cmap='inferno')                
             else:
-                axs[i].imshow(np.array(newdf[col]).reshape(N-1, N-1),origin='lower',extent=extent,cmap='inferno')
+                axs[i].imshow(np.array(newdf[col]).reshape(Ny, Nx),origin='lower',extent=extent,cmap='inferno')
             axs[i].set_title(labels[i-skip],fontsize=9)
         axs[i].plot(data[:datalen,1],data[:datalen,2],color='white')
         axs[i].scatter(data[datalen-1,1],data[datalen-1,2],color='white',marker='x')
@@ -669,11 +713,11 @@ def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
     
     fig2,axgrid = plt.subplots(3,1,figsize=(4,6))
     axs = axgrid.flatten()      
-    axs[0].imshow(np.array(newdf['markov_dxdy']).reshape(N-1, N-1),origin='lower',extent=extent)
+    axs[0].imshow(np.array(newdf['markov_dxdy']).reshape(Ny, Nx),origin='lower',extent=extent,interpolation='spline16')
     axs[0].annotate('ln$(P_\mathrm{nonpar})$\n\nNonparametric',xy=(1.3, .5), xycoords='axes fraction',rotation=270,horizontalalignment='right',verticalalignment='center',multialignment='center',size=14)
-    axs[1].imshow(np.array(p_par).reshape(N-1, N-1),origin='lower',extent=extent)
+    axs[1].imshow(np.array(p_par).reshape(Ny, Nx),origin='lower',extent=extent,interpolation='spline16')
     axs[1].annotate('ln$(P_\mathrm{par})$\n\nParametric',xy=(1.3, .5), xycoords='axes fraction',rotation=270,horizontalalignment='right',verticalalignment='center',multialignment='center',size=14)
-    im=axs[2].imshow(np.array(p_par-newdf['markov_dxdy']).reshape(N-1, N-1),origin='lower',extent=extent,vmin=-3,vmax=3,cmap='RdBu')
+    im=axs[2].imshow(np.array(p_par-newdf['markov_dxdy']).reshape(Ny, Nx),origin='lower',extent=extent,vmin=-3,vmax=3,cmap='RdBu',interpolation='spline16')
     cb = plt.colorbar(im,pad=0.0,fraction=0.2)#,ax=axs[2])
     #cb.set_label('ln $(P_\mathrm{par}/P_\mathrm{nonpar})$',rotation=270,verticalalignment='bottom',size=14)
     axs[2].annotate('ln $(P_\mathrm{par}/P_\mathrm{nonpar})$',xy=(1.3, .5), xycoords='axes fraction',rotation=270,horizontalalignment='right',verticalalignment='center',multialignment='center',size=14)
@@ -686,7 +730,164 @@ def heatmaps(dataset,filename,index,datalen,data_extent,**kwargs):
     #axs[3].set_axis_off()       
     plt.show()
 
-    return fig1,fig2,newdf,p_par,data
+    return fig1,fig2,newdf,p_par,data,res
+
+
+def infogain(dataset,filename,data_extent,title,**kwargs):
+
+    #model_id = 'jump-16-5'    
+    
+    #traindata = load_data('waldo_short','train')
+    traindata = load_data(dataset,'train')
+    testdata1 = load_data(dataset,'val')
+    testdata2 = load_data(dataset,'test')
+    stds = traindata.S_std.numpy().flatten()
+    means = traindata.S_mean.numpy().flatten()
+    #data_extent = ((0-means[0])/stds[0],(1000-means[0])/stds[0],(0-means[1])/stds[1],(800-means[1])/stds[1])
+
+    print('using model arguments:',kwargs)
+    
+    traindata = [data.detach().numpy() for data in traindata]
+    for x in traindata:
+        x[:,1:] = x[:,1:]*stds + means
+
+    #spl = get_spline("stepselect_waldo_posttimeopt_emp2.csv")
+    spl = stepselect.get_spline(traindata)#(filename)
+
+    markovdist = stepselect.Conditional_dXdY(traindata,data_extent,seed=444,sigma_xy=1500,sigma_dxdy=30)
+    lognormaldist = stepselect.LogNormalDist(traindata,data_extent,seed=444)
+
+    cols = ['dist','logdist','logdist_sq','cardinality','horiz_align','centre_dist_change','dir_change','dir_change2','log_amp_change','dist_1back','centre_dist_init','have_visited','whistdist','whistdist_change','crossings']
+    #cols = ['logdist','logdist_sq','cardinality','horiz_align','centre_dist_change','dir_change','dir_change2','log_amp_change','dist_1back','centre_dist_init','have_visited','whistdist','whistdist_change','crossings']
+    ss_df = pd.read_csv(filename)
+    ss_df['logdist_sq'] = ss_df['logdist']**2
+    #ss_df['cardinality'] = (1+ss_df['cardinality'])**2
+    #ss_df['horiz_align'] = (1+ss_df['horiz_align'])**2
+    #res = stepwise_regression(ss_df,cols,extra=['logdist*t'])#,thresh=0.001)
+
+    norm_df = ss_df.copy()
+    preds = cols + ['t']
+    colmeans = {}
+    colstds = {}
+    for col in preds:
+        colmeans[col] = ss_df[col].mean()
+        colstds[col] = ss_df[col].std()
+        norm_df[col] = (ss_df[col] - colmeans[col]) / colstds[col]
+
+
+    res,fig_conditional = stepwise_regression(norm_df,cols,extra=['logdist:t','t'],conditional="choice_id")#,thresh=1.0)
+    #res_comb = stepwise_regression(norm_df,cols,extra=['markov_dxdy','logdist:t','t'],conditional="choice_id")#,thresh=1.0)
+
+    models = []
+
+    models.append(stepselect.ParametricModel(data_extent,cols=cols,**kwargs))
+    models.append(stepselect.MarkovModel(markovdist,predname="markov_dxdy",ampspline=spl))
+    models.append(stepselect.MarkovModel(lognormaldist,predname="markov_par"))
+    #models.append(stepselect.NNModel(model_id,n_iter=5,maxhist=1,predname="nn_nohist"))
+    #models.append(stepselect.NNModel(model_id,n_iter=5))
+
+    ll_par = []
+    ll_nonpar = []
+    ll_comb = []
+    allt = []
+    allind = []
+    
+    extent = data_extent
+    Nx=96
+    Ny=54
+    x = np.linspace(extent[0],extent[1], Nx+1) #edges (Nx+1)
+    y = np.linspace(extent[2],extent[3], Ny+1)
+    dx = x[1]-x[0]
+    dy = y[1]-y[0]
+    #s = np.stack([x, y], axis=1)
+    #s = np.stack([x[:-1]+dx/2, y[:-1]+dy/2], axis=1) #centres (Nx*Ny)
+
+    X, Y = np.meshgrid(x[:-1]+dx/2, y[:-1]+dy/2)
+    steps = np.stack([X.reshape(-1), Y.reshape(-1)], axis=1)
+
+
+    testdata = testdata1 + testdata2
+    print(len(testdata),'trials')
+    for j,d in enumerate(testdata):
+        data = d.detach().numpy()
+        data[:,1:] = data[:,1:]*stds + means
+        
+        for m in models:
+            m.reset()
+
+        for i in range(len(data[:,0])-1):        
+            [t0,x0,y0] = data[i,:]
+            t1 = data[i+1,0]
+    
+            for m in models:
+                m.model_update(t0,x0,y0)
+                
+            if i < 3:
+                continue
+    
+            newdf = pd.DataFrame(np.array(steps),columns=['x','y'])
+            newdf['t'] = t1
+            for m in models:
+                if m.predname=='markov_dxdy':
+                   preds_df = m.get_predictors(t1,steps,logit=True)            
+                else:
+                   preds_df = m.get_predictors(t1,steps,logit=False)            
+                newdf = pd.concat([newdf,preds_df],axis=1)
+                #print("model complete")
+                
+            #hack to avoid constant exog term error in statsmodels
+            newdf2 = newdf.copy()
+            dummyrow = pd.DataFrame([[0.123] * len(newdf2.columns)], columns=newdf2.columns)
+            newdf2 = pd.concat([newdf2,dummyrow],axis=0)
+            #dummy columns
+            newdf2['choice_id'] = 1
+            dumtarget = np.zeros(len(newdf2))
+            dumtarget[0] = 1
+            newdf2['target'] = dumtarget
+            #newdf['cardinality'] = (1+newdf['cardinality'])**2
+            #newdf['horiz_align'] = (1+newdf['horiz_align'])**2
+        
+        
+            for col in preds:
+                newdf2[col] = (newdf2[col] - colmeans[col]) / colstds[col]
+            
+            newmod = sm.ConditionalLogit.from_formula(res.model.formula,newdf2,groups='choice_id')
+            p_par = newdf['markov_par']*np.exp(np.dot(newmod.exog[:-1,:],res.params))
+
+            #newmod_comb = sm.ConditionalLogit.from_formula(res_comb.model.formula,newdf,groups='choice_id')
+            #p_comb = newdf['markov_par']*np.exp(np.dot(newmod_comb.exog,res_comb.params))
+
+            p_nonpar = 1/(1+np.exp(-newdf['markov_dxdy']))
+            p_comb = (p_par/sum(p_par) + p_nonpar/sum(p_nonpar)) / 2
+            
+            x1 = data[i+1,1]
+            y1 = data[i+1,2]
+            indx = np.argmax(x>x1)
+            indy = np.argmax(y>y1)
+            ind = (indx-1)+(indy-1)*Nx
+            ll_par.append(np.log(p_par[ind] / sum(p_par) + 1e-8))
+            ll_nonpar.append(np.log(p_nonpar[ind] / sum(p_nonpar) + 1e-8))
+            ll_comb.append(np.log(p_comb[ind] / sum(p_comb) + 1e-8))
+            allt.append(data[i+1,0])
+            allind.append(i+1)
+            
+        print(j,np.mean(ll_par),np.mean(ll_nonpar),np.mean(ll_comb))
+        
+    ll_interp = []
+    x_vals = np.linspace(0,1,51)
+    for x in x_vals:
+        ll_interp.append((np.mean(np.log(x*np.exp(ll_par)+(1-x)*np.exp(ll_nonpar)))+np.log(Nx*Ny))/np.log(2))
+    print(np.max(ll_interp))
+    ind = np.argmax(ll_interp)
+    print(x_vals[ind])
+    fig = plt.figure(figsize=(4,3))
+    plt.plot(x_vals,ll_interp)
+    plt.xlabel('Parametric model weight')
+    plt.ylabel('Information gain (bits / fix)')
+    plt.title(title)
+    plt.show()
+
+    return np.array(ll_par),np.array(ll_nonpar),np.array(ll_comb),np.array(allt),np.array(allind),fig,fig_conditional
 
 
 def nn_hist(total_df):
