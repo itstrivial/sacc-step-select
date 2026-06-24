@@ -12,7 +12,7 @@ import pandas as pd
 
 import torch
 from abc import abstractmethod
-from stepselect import load_data, Conditional_dXdY, Unconditional_XY, Unconditional_ThetaR_Indep, Unconditional_ThetaR_Joint, LogNormalDist, MarkovModel, NNModel, ParametricModel, get_spline
+from stepselect import load_data, Conditional_dXdY, Unconditional_XY, Unconditional_ThetaR_Indep, Unconditional_ThetaR_Joint, LogNormalDist, MarkovModel, ParametricModel, get_spline
 from stepselect_analysis import run_regression, stepwise_regression, linspline_regression
 
 def cast(tensor, device):
@@ -97,47 +97,6 @@ class Metropolis2D:
        
        return self.x, self.y, i/j
     
-class Metro_NN(Metropolis2D):
-    def __init__(self,model,xlim,ylim,t_extra=1.0,dt=0.02,**kwargs):
-        super().__init__(xlim,ylim,**kwargs)
-        self.nn_model = model
-        self.models = [self.nn_model]
-        self.max_hist = model.max_hist
-        self.t_extra = t_extra
-        self.dt = dt
-        
-    def evaluate(self,t,x,y):
-        pred = self.nn_model.get_predictors_alt(t,[[x,y]],logit=False)
-        
-        return pred.iloc[0,0]
-
-    def sample_t(self):
-        #get intensity function
-        if i>self.max_hist:
-            t0 = self.nn_model.event_times[0,i-self.max_hist]
-            dl = self.condition_t(self.nn_model.event_times[:,(i-self.max_hist):]-t0,self.nn_model.spatial_locations[:,(i-self.max_hist):,:])
-        else:
-            dl = self.condition_t(self.nn_model.event_times,self.nn_model.spatial_locations)
-        
-        #sample intensity for new time point
-        for j in range(len(dl)):
-            r = self.rng.uniform()
-            if r<dl[j]:
-                t = ((j+0.5)*self.dt)
-                break
-            
-        return t
-        
-    def condition_t(self,event_times,spatial_locations):
-        t_steps = event_times.shape[1]
-        
-        with torch.no_grad():
-           intensities,lambdas,hiddens,_ = self.nn_model.model.temporal_model.lambda_traj(event_times[:,:t_steps], spatial_locations[:,:t_steps,:], None, 0, event_times[0,t_steps-1]+self.t_extra, self.dt)
-        l = np.array([x.detach().cpu().numpy() for x in lambdas]).T
-        dl = np.diff(l[0,:]) #intensity function
-    
-        return dl
-
 
 
     
@@ -351,16 +310,8 @@ if __name__ == '__main__':
     parargs["maxtime_visited"]=6.0
     parargs["max_r"] = screendist*np.tan(1.5*np.pi/180)/mmperpx
     
-    if gen_args.modeltype=='nn':
-        x_dim = 2
-                
-        model_id = 'jump-16-5'
-        nn_model = NNModel(model_id,maxhist=20)
-        
-        mcmc = Metro_NN(nn_model,[extent[0],extent[1]],[extent[2],extent[3]],**mcmc_args)
-        
     
-    elif gen_args.modeltype=='markov_dxdy':
+    if gen_args.modeltype=='markov_dxdy':
         
         #markovdist = Conditional_dXdY(data,data_extent,**kwargs)
         markovdist = Conditional_dXdY(data,data_extent,ampspline=spl,**kwargs)

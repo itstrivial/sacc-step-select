@@ -99,11 +99,13 @@ class ParametricModel:
                  screendist=-1,
                  col_t=False,
                  linspline=None,
-                 quantiles=None):
+                 quantiles=None,
+                 predname=None):
         self.allsteps = []
         self.allangs = []
         self.extent = extent #only used for walldist,dist_deg and crossing_r
         self.rng = np.random.default_rng(seed)
+        self.predname = predname
         self.currwd = None
         self.currcd = None
         self.currang = None

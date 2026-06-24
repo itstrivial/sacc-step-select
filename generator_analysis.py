@@ -46,7 +46,7 @@ def spatial_stats(x,y,t,gridsize=50,tstep=2):
     return empsites
 
 
-def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,extent=None,mmperpx=-1,screendist=-1,**mod_args):
+def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,extent=None,mmperpx=-1,screendist=-1,split='test',plot=True,**mod_args):
     
     colors = list(sns.color_palette("Dark2").as_hex())
     #colors = ['#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0','#f0027f','#bf5b17']
@@ -62,8 +62,14 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     #alldata = train_set + load_data('waldo_short', split='test') + load_data('waldo_short', split='val')
     testdata = load_data(dataset, split='test')
     valdata = load_data(dataset, split='val')
-    alldata = testdata + valdata
-    allIDs = testdata.IDs + valdata.IDs
+    if split=='all':
+        alldata = train_set + testdata + valdata
+        allIDs = train_set.IDs + testdata.IDs + valdata.IDs
+    elif split=='test':
+        alldata = testdata + valdata
+        allIDs = testdata.IDs + valdata.IDs
+    else:
+        raise ValueError('invalid split: '+split)
     
     print('model parameters:',mod_args)
     if mmperpx > 0:
@@ -204,7 +210,6 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     all_spatial_std = [np.std(np.array(cat_spatial),axis=0)] + all_spatial_std
     
     
-    
     print('Total saccades:',[len(x) for x in all_crossings])
     print('Total crossings:',[len(x) for x in all_r1])
     print('Mean crossings per saccade:',[np.mean(x) for x in all_crossings])
@@ -214,6 +219,10 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     print('Median crossing saccade length:',[np.median(x) for x in all_r1])
     print('Median crossed saccade length:',[np.median(x) for x in all_r2])
     print('Ratio crossed/all:',[np.median(all_r2[i])/np.median(np.exp(all_logdist[i])) for i in range(len(all_logdist))])
+    
+    
+    if not plot:
+        return cross_per_trial
     
     if leg is None:
        leg = ['data'] + cats
@@ -306,6 +315,7 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     else:
         hist_div = 50.0
         
+    plt.style.use("ggplot")
     
     fig77 = plt.figure(figsize=(4.5,3))
     fig77.gca().set_prop_cycle(cyc)
@@ -319,8 +329,8 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     #for i,label in enumerate(leg):
         #quartiles = np.quantile(np.exp(all_logdist[i]),[0.5,0.25,0.75])
         #plt.errorbar(quartiles[0],0.0008-0.0002*i,xerr=np.array([abs(quartiles[1:]-quartiles[0])]).T,fmt='P',alpha=0.7)
-    plt.fill_between([0] + list(distx_fine),[0] + list(disth_fine/sum(disth_fine)/hist_div),color='lightgrey')
-    plt.plot([0] + list(distx_fine),[0] + list(rh_fine/sum(rh_fine)/hist_div),color='darkgrey',linewidth=1)    
+    plt.fill_between([0] + list(distx_fine),[0] + list(disth_fine/sum(disth_fine)/hist_div),color='darkgrey')
+    plt.plot([0] + list(distx_fine),[0] + list(rh_fine/sum(rh_fine)/hist_div),color='dimgrey',linewidth=1)    
     if plot_degrees:
         plt.xlabel('Crossing saccade length (degrees)')
         plt.ylabel('# crossings per degree')
@@ -330,6 +340,8 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
         #plt.ylim([0,0.008])
         #plt.yticks([0,0.002,0.004,0.006,0.008])
     plt.xlim([0,distx[-1]])
+    plt.ylim([0,0.4])
+    fig77.text(-0.03,0.9,'(b)',fontsize='x-large')
     plt.legend(leg)
     plt.show()
 
@@ -348,8 +360,8 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     #for i,label in enumerate(leg):
         #quartiles = np.quantile(np.exp(all_logdist[i]),[0.5,0.25,0.75])
         #plt.errorbar(quartiles[0],0.0008-0.0002*i,xerr=np.array([abs(quartiles[1:]-quartiles[0])]).T,fmt='P',alpha=0.7)
-    plt.fill_between([0] + list(distx_fine),[0] + list(disth_fine/sum(disth_fine)/hist_div),color='lightgrey')
-    plt.plot([0] + list(distx_fine),[0] + list(rh_fine/sum(rh_fine)/hist_div),color='darkgrey',linewidth=1)    
+    plt.fill_between([0] + list(distx_fine),[0] + list(disth_fine/sum(disth_fine)/hist_div),color='darkgrey')
+    plt.plot([0] + list(distx_fine),[0] + list(rh_fine/sum(rh_fine)/hist_div),color='dimgrey',linewidth=1)    
     if plot_degrees:
         plt.xlabel('Crossed saccade length (degrees)')
         plt.ylabel('# crossings per degree')
@@ -358,7 +370,9 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
         plt.ylabel('# crossings per pixel')
         #plt.ylim([0,0.008])
         #plt.yticks([0,0.002,0.004,0.006,0.008])
+    fig99.text(-0.03,0.9,'(a)',fontsize='x-large')
     plt.xlim([0,distx[-1]])
+    plt.ylim([0,0.4])
     #plt.legend(leg)    
     plt.show()
 
@@ -376,8 +390,8 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     fig88.gca().set_prop_cycle(cyc)
     #quartiles = np.quantile(np.exp(all_logdist[0]),[0.5,0.25,0.75])
     #plt.errorbar(quartiles[0],0.0002,xerr=np.array([abs(quartiles[1:]-quartiles[0])]).T,fmt='P',alpha=0.7,color='darkgrey')
-    plt.fill_between([0] + list(distx_fine),[0] + list(disth_fine/sum(disth_fine)/hist_div),color='lightgrey')
-    plt.plot([0] + list(distx_fine),[0] + list(rh_fine/sum(rh_fine)/hist_div),color='darkgrey',linewidth=1)    
+    plt.fill_between([0] + list(distx_fine),[0] + list(disth_fine/sum(disth_fine)/hist_div),color='darkgrey')
+    plt.plot([0] + list(distx_fine),[0] + list(rh_fine/sum(rh_fine)/hist_div),color='dimgrey',linewidth=1)    
     if plot_degrees:
         plt.xlabel('Saccade length (degrees)')
         plt.ylabel('# crossings per degree')
@@ -387,8 +401,10 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
         #plt.ylim([0,0.015])
         #plt.yticks([0,0.005,0.01])
     plt.xlim([0,distx[-1]])
-    plt.legend(leg,frameon=False)
-    fig88.text(0.01,0.9,'a',fontsize='x-large')
+    plt.ylim([0,0.8])
+    plt.yticks([0,0.2,0.4,0.6,0.8])
+    plt.legend(leg)#,frameon=False)
+    fig88.text(-0.03,0.9,'(a)',fontsize='x-large')
     plt.show()
     
 
@@ -420,7 +436,7 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     ax4.set_xticks([])
     ax4.set_yticks([])
 
-    fig.text(0.01,0.9,'a',fontsize='x-large')
+    #fig.text(0.01,0.9,'a',fontsize='x-large')
     #plt.title('data-markov model difference')
     plt.show()
     
@@ -464,7 +480,8 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     plt.ylabel('Probability per pixel')
     plt.show()
        
-    fig2 = plt.figure()
+    plt.style.use("default")
+    fig2 = plt.figure(figsize=(6,4))
     fig2.gca().set_prop_cycle(cyc)
     x = np.linspace(0,30,50)
     #sfactor = 1.0
@@ -501,9 +518,11 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
         else:
            hand = plt.errorbar(t_cent,ymed,yerr=abs(ylims-ymed),fmt='P',capsize=4)
            hands.append(hand[0])
-    plt.xlabel('time (s)')
+    plt.ylim([3,6])
+    plt.xlabel('Time in trial (s)')
     plt.ylabel('log (saccade length)')
-    plt.legend(hands,leg)
+    plt.legend(hands,leg,frameon=False)
+    fig2.text(0.01,0.91,'(b)',fontsize='x-large')
     plt.show()
     
     allcum = []
@@ -543,8 +562,8 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
         else:
             marker='-P'
         plt.errorbar(t_cent,allmedian,yerr=abs(conf-np.array(allmedian)),fmt=marker,capsize=4)
-    plt.xlabel('time (s)')
-    plt.ylabel('mean # crossings')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Mean # crossings')
     plt.legend(leg)
     plt.show()
     
@@ -557,22 +576,59 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
             marker='-P'
         plt.errorbar(t_bins[1:],allcum[i],yerr=allcum_std[i],fmt=marker,capsize=4)
     #plt.legend(leg,frameon=False,fontsize='medium')
-    plt.xlabel('time (s)')
-    plt.ylabel('mean cumulative crossings')
-    fig3.text(0.01,0.9,'b',fontsize='x-large')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Mean cumulative crossings')
+    fig3.text(-0.03,0.9,'(b)',fontsize='x-large')
     plt.show()
 
-    return fig88, fig77, fig99, fig2, fig3, all_logdist, all_t
+    return fig88, fig77, fig99, fig2, fig3, cross_per_trial
 
+
+def crossing_box(**kwargs):
+    import seaborn as sns
+    plt.style.use('ggplot')
+    
+    n_par = 31
+    n_randpix = 3
+    n_waldo = 9
+
+    cross_pertrial1 = crossing_comparison('generator_data_waldo_all',['markov_dxdy_dirsample'],'waldo_2024',normalized=True,plot=False,split='all',**kwargs)
+    cross_pertrial2 = crossing_comparison('generator_data_randpix_all',['markov_dxdy_dirsample'],'randpix',normalized=True,plot=False,split='all',**kwargs)
+
+    
+    cross_perpar1 = np.reshape(np.array(cross_pertrial1,dtype='object'),(2*n_par,n_waldo))
+    cross_perpar2 = np.reshape(np.array(cross_pertrial2,dtype='object'),(2*n_par,n_randpix))
+    c1 = [np.mean(np.concat(x)) for x in cross_perpar1[:n_par]]
+    c2 = [np.mean(np.concat(x)) for x in cross_perpar1[n_par:]]
+    c3 = [np.mean(np.concat(x)) for x in cross_perpar2[:n_par]]
+    c4 = [np.mean(np.concat(x)) for x in cross_perpar2[n_par:]]
+
+    fig = plt.figure(figsize=(6, 4.5))
+    sns.boxplot([c1,c2,c3,c4], color='lightblue',showfliers=False)
+    sns.stripplot([c1,c2,c3,c4], color='black', size=4, jitter=True, alpha=0.6)
+    plt.xticks([0,1,2,3],['Waldo\nData','Waldo\nNP','Random pixel\nData','Random pixel\nNP'])
+    plt.ylabel('Mean crossings per saccade')
+    plt.ylim([0,1.4])
+    plt.show()
+    
+    plt.style.use("default")
+    
+    return fig,[c1,c2,c3,c4]
 
 if __name__ == '__main__':
     
+    from scipy.stats import ttest_ind, levene
+
     kwargs = {}
     kwargs['extent'] = (0,1920,0,1080)
     kwargs['mmperpx'] = 0.2825
     kwargs['screendist'] = 1000
     kwargs['maxtime_cross'] = 7.0
     
-    fig_perpix,fig_crossing_perpix,fig_crossed_perpix,fig_ampspline,fig_cumcross,all_logdist,all_t = crossing_comparison('generator_data',['markov_dxdy_dirsample','semipar_nohist','semipar_hist'],'waldo_2024',normalized=True,leg=['Data','Nonparametric','Parametric (no memory)','Parametric (memory)'],**kwargs)
+    fig_cross_box,crossings = crossing_box(**kwargs)
+
+    
+
+    #fig_perpix,fig_crossing_perpix,fig_crossed_perpix,fig_ampspline,fig_cumcross,all_logdist,all_t = crossing_comparison('generator_data',['markov_dxdy_dirsample','semipar_nohist','semipar_hist'],'waldo_2024',normalized=True,leg=['Data','Nonparametric','Parametric (no memory)','Parametric (memory)'],**kwargs)
 
     

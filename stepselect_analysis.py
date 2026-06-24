@@ -219,6 +219,8 @@ def run_mixed_regression(base_df, cols, nn_gain=None, winter=False):
 
 def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
 
+    plt.style.use('ggplot')
+
     randeff_df = pd.read_csv(randeff_file,index_col=0)
     basic_df = pd.read_csv(basic_file)
     
@@ -233,7 +235,7 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
     basic_logdist = []
     par = np.unique(basic_df.Participant)
     for p in par:
-       total_fix.append(np.mean(basic_df['Median fixation duration'][basic_df.Participant==p]))
+       total_fix.append(np.mean(basic_df['Mean fixation duration'][basic_df.Participant==p]))
        basic_logdist.append(np.mean(np.log(basic_df['Median saccade distance'][basic_df.Participant==p])))
     
     
@@ -241,8 +243,8 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
     nfix_p = []
     sig = []
     for i in range(y_arr.shape[1]):
-       corr = stats.pearsonr(y_arr[:,i],total_fix)
-       #corr = stats.spearmanr(y_arr[:,i],total_fix)
+       #corr = stats.pearsonr(y_arr[:,i],total_fix)
+       corr = stats.spearmanr(y_arr[:,i],total_fix)
        nfix_corr.append(corr.statistic)
        nfix_p.append(corr.pvalue)
        if corr.pvalue<0.05:
@@ -254,12 +256,18 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
     if randeff_df.columns[0] == 'logdist':
         fig4,axs = plt.subplots(1,2,figsize=(8,3.5))        
         axs[0].scatter(basic_logdist,total_fix)
-        axs[0].set_ylabel('Fixation time')
-        axs[0].set_xlabel('Log-length (avg)')
+        axs[0].set_ylabel('Mean fixation time (s)')
+        axs[0].set_xlabel('Median log-length (px)')
         axs[1].scatter(y_arr[:,0],total_fix)
-        axs[1].set_yticks([])
+        axs[1].set_yticklabels([])
+        axs[1].tick_params(axis='y',length=0)
         axs[1].set_xlabel('Log-length coefficient')
-        corr = stats.pearsonr(basic_logdist,total_fix)
+        axs[1].grid(visible=True,axis='y',which='both')
+        fig4.text(0.02,0.92,'(a)',fontsize='large')
+        fig4.text(0.5,0.92,'(b)',fontsize='large')
+
+        #corr = stats.pearsonr(basic_logdist,total_fix)
+        corr = stats.spearmanr(basic_logdist,total_fix)
         print('Basic logdist correlation:',corr)
 
         plt.show()
@@ -277,7 +285,7 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
     
     pc1 = pca.fit_transform(y_arr)[:,0]
     pc2 = pca.fit_transform(y_arr)[:,1]
-    nfix_pc1_corr = stats.pearsonr(pc1,total_fix)#np.corrcoef(pc1,total_fix)[0,1]
+    nfix_pc1_corr = stats.spearmanr(pc1,total_fix)#np.corrcoef(pc1,total_fix)[0,1]
     print('Fixation time PC1 corr',nfix_pc1_corr.statistic,'p =',nfix_pc1_corr.pvalue)
 
     if nfix_pc1_corr.statistic<0:
@@ -285,7 +293,7 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
         print('Inverting PC1')
 
     print('PC2 variance',pca.explained_variance_ratio_[1])
-    nfix_pc2_corr = stats.pearsonr(pc2,total_fix)#np.corrcoef(pc2,total_fix)[0,1]
+    nfix_pc2_corr = stats.spearmanr(pc2,total_fix)#np.corrcoef(pc2,total_fix)[0,1]
     print('Fixation time PC2 corr',nfix_pc2_corr.statistic,'p =',nfix_pc2_corr.pvalue)
 
     plt.rcParams['hatch.color'] = 'white'  
@@ -298,40 +306,61 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
     if len(icc)>0:
        fig,axs = plt.subplots(4,1,figsize=(6,7.5))
        skip=0
-       axs[0].bar(0.5+np.arange(len(icc)), icc,color='gray',width=w)
+       axs[0].bar(0.5+np.arange(len(icc)), icc,color='#896391',edgecolor='black',width=w)
        axs[0].set_xticks([])
        axs[0].set_ylim([0,1])
+       axs[0].set_yticks([0.25,0.75], minor=True)
+       axs[0].tick_params(axis='y', which='minor', left=True)
+       #plt.minorticks_on()
        axs[0].set_ylabel('ICC')
+       axs[0].grid(visible=True,axis='y',which='minor')
     else:
        fig,axs = plt.subplots(3,1,figsize=(6,6))
        skip=1
-       
-    axs[1-skip].bar(0.5+np.arange(len(sig_preds)), np.std(y_arr,axis=0),color='gray',width=w)
+    #e3c114
+    #d4b30f
+    #c2a40e
+    axs[1-skip].bar(0.5+np.arange(len(sig_preds)), np.std(y_arr,axis=0),color='#896391',edgecolor='black',width=w)
     axs[1-skip].set_xticks([])
+    axs[1-skip].set_yticks([0.05,0.15], minor=True)
+    axs[1-skip].tick_params(axis='y', which='minor', left=True)
     axs[1-skip].set_ylabel('Std dev.')
+    axs[1-skip].grid(visible=True,axis='y',which='minor')
     
     inds = (np.array(nfix_corr)>0).astype(int)
 
     axs[2-skip].bar(0.5+np.arange(len(sig_preds)), nfix_corr,color=pmcols[inds],hatch=hatches[sig],width=w)#,color=pmcols[inds+2*(1-np.array(sig))])
     axs[2-skip].set_xticks([])
     axs[2-skip].set_ylim([-1,1])
-    axs[2-skip].grid(axis='y')
-    axs[2-skip].set_ylabel(r'$r\,(y,t_\mathrm{fix})$')
+    axs[2-skip].set_yticks([-0.5,0.5], minor=True)
+    axs[2-skip].tick_params(axis='y', which='minor', left=True)
+    axs[2-skip].grid(visible=True,axis='y',which='both')
+    axs[2-skip].set_ylabel(r'$\rho\,(y,t_\mathrm{fix})$')
 
     axs[3-skip].bar(0.5+np.arange(len(sig_preds)), comp1, color=pmcols[(np.array(comp1)>0).astype(int)],width=w)
     axs[3-skip].set_ylabel('PC1 loading')
     axs[3-skip].set_ylim([-1,1])
-    axs[3-skip].grid(axis='y')
+    axs[3-skip].set_yticks([-0.5,0.5], minor=True)
+    axs[3-skip].tick_params(axis='y', which='minor', left=True)
+    axs[3-skip].grid(visible=True,axis='y',which='both')
+    axs[3-skip].grid(visible=False,axis='x',which='both')
     axs[3-skip].set_xticks(0.5+np.arange(len(sig_preds)), labels=sig_preds, rotation=45, ha='right')
 
     if len(icc)>0:
-       fig.text(-0.02,0.865,'a',fontsize='x-large')
-       fig.text(-0.02,0.67,'b',fontsize='x-large')
-       fig.text(-0.02,0.475,'c',fontsize='x-large')
-       fig.text(-0.02,0.28,'d',fontsize='x-large')
+       fig.text(-0.06,0.865,'(a)',fontsize='x-large')
+       fig.text(-0.06,0.67,'(b)',fontsize='x-large')
+       fig.text(-0.06,0.475,'(c)',fontsize='x-large')
+       fig.text(-0.06,0.29,'(d)',fontsize='x-large')
+    else:
+       fig.text(-0.06,0.85,'(a)',fontsize='x-large')
+       fig.text(-0.06,0.6,'(b)',fontsize='x-large')
+       fig.text(-0.06,0.35,'(c)',fontsize='x-large')
 
     plt.show()
     
+    plt.style.use('default')
+
+
     corrmat = np.corrcoef(y_arr.T)
     fig2 = plt.figure()
     plt.imshow(np.tril(corrmat,k=-1),vmin=-1,vmax=1,cmap='RdBu')
@@ -340,6 +369,7 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
     plt.yticks(np.arange(len(sig_preds)), labels=sig_preds, rotation=45, ha='right')
     plt.title(corrmap_title)
     plt.show()
+    
     
     fig3 = plt.figure(figsize=(14,2))
     ax = plt.gca()
@@ -355,6 +385,7 @@ def mixed_effects_figs(randeff_file,basic_file,icc,corrmap_title,labels = None):
         ax.text(i+0.5,1.5,f"{comp2[i]:.2f}",ha='center',va='center',size='x-large',fontweight='bold',color='#555555')
         ax.text(i+0.5,0.5,f"{comp3[i]:.2f}",ha='center',va='center',size='x-large',fontweight='bold',color='#555555')
 
+    plt.show()
     
     return fig, fig2, fig3, fig4, total_fix
 
@@ -1000,22 +1031,25 @@ def get_all_interactions(cols,extra=[]):
     return allpreds
 
 
-def stepwise_regression(df,cols,extra = [],thresh=-1): #0.05):
+def stepwise_regression(df,cols,extra = [],thresh=-1,regularize=False,conditional=None):
     #logdist and logdist_sq must come first and second!
     #Set thresh<0 to use AIC, thresh>0 uses p values
     
-    ss_df = sm.add_constant(df)
-    ss_df = df
+    ss_df = df.copy()
+
     
     allpreds = get_all_interactions(cols,extra=extra)
     print('Starting with',len(allpreds),'terms')
     
     done=False
     oldaic = np.inf
+    oldpreds = allpreds + []
+    
+    
     while True:
-        mod = sm.Logit.from_formula('target ~ ' + ' + '.join(allpreds),ss_df)
-        #mod = ConditionalLogit.from_formula('target ~ ' + ' + '.join(allpreds),ss_df,groups=ss_df['choice_id'],hasconst=False)
-        newres = mod.fit()
+        
+        newmod = sm.Logit.from_formula('target ~ ' + ' + '.join(allpreds),ss_df)
+        newres = newmod.fit()
         regrows = newres.params.keys()
         inds = np.argsort(list(newres.pvalues))
         
@@ -1024,11 +1058,15 @@ def stepwise_regression(df,cols,extra = [],thresh=-1): #0.05):
         
         if thresh<0 and newres.aic>oldaic:
             #keep previous result
+            allpreds = oldpreds
             break
+        
         res = newres
+        mod = newmod
         oldaic = res.aic
 
         for i in inds[::-1]:
+            
             if ':' not in regrows[i]:
                 continue
             if 'logdist:' in regrows[i]:
@@ -1042,16 +1080,66 @@ def stepwise_regression(df,cols,extra = [],thresh=-1): #0.05):
                 done=True
                 break
             else:
+                oldpreds = allpreds + []
                 print('Removing ' + regrows[i])
-                allpreds.remove(regrows[i])
+                if regrows[i].replace(':','*') in allpreds:
+                    allpreds.remove(regrows[i].replace(':','*'))
+                else:
+                    allpreds.remove(regrows[i])
                 break
         if done:
             break
     
     print(res.summary())
     print('Finishing with',len(allpreds),'terms')
+    stepwise_params = res.params.copy()
+
     
-    return res
+    if regularize:
+        print('Regularizing:')
+        l = 0.2 + 5*np.std(mod.exog,axis=0)
+        l[0] = 0.0
+        #allpreds = [x.replace('*',':') for x in allpreds]
+        res = mod.fit_regularized(alpha=l,qc_verbose=True)#L1_wt=0.0,cnvrg_tol=1e-6,zero_tol=1e-6,start_params=np.array([res.params[x] for x in allpreds]))
+        print(res.summary())
+        plt.scatter(np.array(stepwise_params)[1:],np.array(res.params)[1:])
+        plt.show()
+        
+
+
+    if conditional is not None:
+        print('Fitting conditional version:')
+        if 'centre_dist_init' in allpreds:
+           allpreds.remove('centre_dist_init')
+        if 'whistdist' in allpreds:
+           allpreds.remove('whistdist')
+        if 't' in allpreds:
+           allpreds.remove('t')
+        allpreds = [x.replace('*',':') for x in allpreds]
+        mod = sm.ConditionalLogit.from_formula('target ~ 0+ ' + ' + '.join(allpreds),ss_df,groups=conditional)
+        kwargs = {'maxiter':800,
+                  #'method':'nm',
+                  'full_output':True,
+                  'disp':True
+                  #'bounds':[(min(0.0,3*res.params[x]),max(0.0,3*res.params[x])) for x in allpreds],
+                  #'start_params':1.0*np.array([res.params[x] for x in allpreds])
+                  }
+        res = mod.fit(**kwargs)        
+        #l = 0.2 + 5*np.std(mod.exog,axis=0)
+        #res = mod.fit_regularized(alpha=l)
+        print(res.summary())
+        fig = plt.figure(figsize=(4,3))
+        plt.scatter(np.array([stepwise_params[x] for x in allpreds]),np.array(res.params),s=5)
+        plt.xlabel('Unconditional regression coefficient')
+        plt.ylabel('Conditional regression coefficient')
+        plt.show()
+        rho,p = stats.spearmanr(np.array([stepwise_params[x] for x in allpreds]),np.array(res.params))
+        print(rho,p)
+        
+        return res,fig
+    
+    else:
+        return res
 
 def var_importance(filename,title,legend=False):
     ss_df = pd.read_csv(filename)
