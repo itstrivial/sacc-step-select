@@ -110,6 +110,9 @@ class ParametricModel:
         self.currcd = None
         self.currang = None
         self.curramp = None
+        self.currmd = None
+        self.currwhd = None
+        self.curr_centroid_dist = None
         self.maxtime_cross = maxtime_cross
         self.maxtime_closest = maxtime_closest
         self.maxtime_visited = maxtime_visited
@@ -129,10 +132,12 @@ class ParametricModel:
         self.allsteps = []
         self.allangs = []
         self.currwd = None
+        self.currcd = None
         self.currwhd = None
         self.currang = None
         self.curramp = None
         self.currmd = None
+        self.curr_centroid_dist = None
             
     def model_update(self,t,x,y):
         self.allsteps.append([t,x,y])
