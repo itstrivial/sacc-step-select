@@ -1087,6 +1087,9 @@ def stepwise_regression(df,cols,extra = [],thresh=-1,regularize=False,conditiona
                 else:
                     allpreds.remove(regrows[i])
                 break
+        else:
+            # No removable terms remain.
+            break
         if done:
             break
     
