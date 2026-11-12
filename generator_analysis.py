@@ -155,6 +155,9 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
     
     
     
+    all_spatial.append(np.mean(np.array(cat_spatial), axis=0))
+    all_spatial_std.append(np.std(np.array(cat_spatial), axis=0))
+
     for ii,matchstr in enumerate(cats):
         i = ii+1
         n_trials.append(0)
@@ -206,8 +209,6 @@ def crossing_comparison(datadir,cats,dataset,leg=None,normalized=True,maxt=45.0,
 
     
     print(n_trials)
-    all_spatial = [np.mean(np.array(cat_spatial),axis=0)] + all_spatial
-    all_spatial_std = [np.std(np.array(cat_spatial),axis=0)] + all_spatial_std
     
     
     print('Total saccades:',[len(x) for x in all_crossings])
